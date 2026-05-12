@@ -1,7 +1,7 @@
 from telegram.ext import ApplicationBuilder, CommandHandler
 
 from config import TELEGRAM_TOKEN
-from message import create_emoticon
+from message import create_emoticon, my_id
 from util import setup_logger
 
 
@@ -25,6 +25,9 @@ def main():
 
     telegram_application.add_handler(
         CommandHandler("create", create_emoticon)
+    )
+    telegram_application.add_handler(
+        CommandHandler("myid", my_id)
     )
 
     telegram_application.run_polling()
