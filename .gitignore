@@ -4,3 +4,4 @@ venv/
 emoticonTemp/@eaDir
 state.json
 .state.*.json
+.env
