@@ -11,6 +11,14 @@ from telegram.ext import ContextTypes
 
 from config import EMOTICON_ID_REGEX
 from converter import is_animated_webp, webp_to_webm
+from state import (
+    add_to_whitelist,
+    get_owner,
+    get_whitelist,
+    is_authorized,
+    remove_from_whitelist,
+    set_owner,
+)
 
 
 async def my_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -22,8 +30,80 @@ async def my_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def set_owner_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or not update.effective_user:
+        return
+    if set_owner(update.effective_user.id):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"owner 설정 완료: {update.effective_user.id}",
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"이미 owner가 설정되어 있습니다: {get_owner()}",
+        )
+
+
+async def whitelist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or not update.effective_user:
+        return
+    owner = get_owner()
+    if owner is None or update.effective_user.id != owner:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="owner만 사용할 수 있습니다.",
+        )
+        return
+
+    args = context.args or []
+    chat_id = update.effective_chat.id
+
+    if not args or args[0] == "list":
+        wl = sorted(get_whitelist())
+        text = "whitelist:\n" + ("\n".join(str(u) for u in wl) if wl else "(비어 있음)")
+        await context.bot.send_message(chat_id=chat_id, text=text)
+        return
+
+    if len(args) != 2 or args[0] not in ("add", "remove"):
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="사용법: /whitelist [list | add <user_id> | remove <user_id>]",
+        )
+        return
+
+    try:
+        target = int(args[1])
+    except ValueError:
+        await context.bot.send_message(chat_id=chat_id, text="user_id는 정수여야 합니다.")
+        return
+
+    if args[0] == "add":
+        added = add_to_whitelist(target)
+        text = f"추가됨: {target}" if added else f"이미 등록되어 있음: {target}"
+    else:
+        removed = remove_from_whitelist(target)
+        text = f"제거됨: {target}" if removed else f"등록되어 있지 않음: {target}"
+    await context.bot.send_message(chat_id=chat_id, text=text)
+
+
 async def create_emoticon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.effective_user:
+        return
+
+    if get_owner() is None:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="owner가 아직 설정되지 않았습니다. 봇 운영자가 /setowner를 먼저 호출해야 합니다.",
+        )
+        return
+
+    if not is_authorized(update.effective_user.id):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"권한이 없습니다. 운영자에게 user_id 등록을 요청하세요.\n"
+                 f"본인 ID: {update.effective_user.id}",
+        )
         return
 
     if not context.args:
@@ -33,7 +113,7 @@ async def create_emoticon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    emoticon_url = context.args[0]
+    emoticon_url = context.args[0].split("?", 1)[0].split("#", 1)[0]
 
     if not EMOTICON_ID_REGEX.match(emoticon_url):
         await context.bot.send_message(
