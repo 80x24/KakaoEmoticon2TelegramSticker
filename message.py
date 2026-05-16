@@ -161,10 +161,11 @@ async def create_emoticon(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 first_anim_bytes = await r.read()
         is_animated = is_animated_webp(first_anim_bytes)
 
-        await context.bot.send_message(
+        kind_label = "동영상" if is_animated else "정적"
+        download_message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"{title} 이모티콘을 다운로드 합니다. "
-                 f"({'동영상' if is_animated else '정적'} 스티커, {len(items)}개)",
+                 f"({kind_label} 스티커, {len(items)}개)",
         )
 
         stickers: List[InputSticker] = []
@@ -184,8 +185,15 @@ async def create_emoticon(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         format=StickerFormat.VIDEO,
                     )
                 )
+                try:
+                    await download_message.edit_text(
+                        text=f"{title} 다운로드/변환 중... "
+                             f"({idx + 1}/{len(items)})",
+                    )
+                except Exception:
+                    pass
         else:
-            for item in items:
+            for idx, item in enumerate(items):
                 async with session.get(item["thumbnailUrl"]) as img:
                     img_bytes = BytesIO()
                     Image.open(BytesIO(await img.read())).resize((512, 512)).save(
@@ -198,6 +206,12 @@ async def create_emoticon(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             format=StickerFormat.STATIC,
                         )
                     )
+                try:
+                    await download_message.edit_text(
+                        text=f"{title} 다운로드 중... ({idx + 1}/{len(items)})",
+                    )
+                except Exception:
+                    pass
     cur_time = str(datetime.datetime.now(datetime.timezone.utc).timestamp()).replace(".", "")
     sticker_name = f"t{cur_time}_by_{context.bot.name[1:]}"
 
